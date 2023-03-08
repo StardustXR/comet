@@ -1,6 +1,7 @@
 use color::rgba;
 use color_eyre::eyre::Result;
 use glam::Vec3;
+use map_range::MapRange;
 use mint::Vector3;
 use stardust_xr_fusion::{
     client::{Client, FrameInfo, RootHandler},
@@ -90,7 +91,9 @@ impl Pen {
         );
         let draw_action = BaseInputAction::new(false, |data, _| {
             data.datamap.with_data(|datamap| match &data.input {
-                InputDataType::Hand(_) => datamap.idx("pinch_strength").as_f32() > 0.01,
+                InputDataType::Hand(h) => {
+                    Vec3::from(h.thumb.tip.position).distance(h.index.tip.position.into()) < 0.03
+                }
                 InputDataType::Tip(_) => datamap.idx("select").as_f32() > 0.01,
                 _ => false,
             })
@@ -173,7 +176,11 @@ impl RootHandler for Pen {
             let strength = draw_actor
                 .datamap
                 .with_data(|datamap| match &draw_actor.input {
-                    InputDataType::Hand(_) => datamap.idx("pinch_strength").as_f32(),
+                    InputDataType::Hand(h) => Vec3::from(h.thumb.tip.position)
+                        .distance(h.index.tip.position.into())
+                        .map_range(0.03..0.0, 0.0..1.0)
+                        .clamp(0.0, 1.0)
+                        .sqrt(),
                     InputDataType::Tip(_) => datamap.idx("select").as_f32(),
                     _ => unimplemented!(),
                 });
