@@ -120,6 +120,7 @@ impl Pen {
             }],
         )?;
         let stroke_lines = Lines::create(client.get_root(), Transform::none(), &[])?;
+        stroke_lines.set_zoneable(true)?;
         Ok(Self {
             settings,
             client_root,
