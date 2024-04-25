@@ -205,8 +205,8 @@ impl RootHandler for Pen {
 
     fn save_state(&mut self) -> ClientState {
         ClientState {
-            data: Some(flexbuffers::to_vec(&self.strokes).unwrap()),
-            root: Some(self.client_root.alias()),
+            data: flexbuffers::to_vec(&self.strokes).unwrap(),
+            root: self.client_root.alias(),
             spatial_anchors: FxHashMap::from_iter([("pen".to_string(), self.pen_root.alias())]),
         }
     }
