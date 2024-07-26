@@ -16,8 +16,14 @@
     packages = forAllSystems (system: let pkgs = nixpkgsFor.${system}; in {
       default = crane.lib.${system}.buildPackage {
         src = ./.;
+
+        STARDUST_RES_PREFIXES = pkgs.stdenvNoCC.mkDerivation {
+          name = "resources";
+          src = ./.;
+
+          buildPhase = "cp -r $src/res $out";
+        };
       };
-    });
 
     devShells = forAllSystems (system: let pkgs = nixpkgsFor.${system}; in {
       default = pkgs.mkShell {
