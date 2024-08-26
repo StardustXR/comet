@@ -7,32 +7,53 @@
     };
   };
 
-
-  outputs = { self, nixpkgs, crane }:
-  let supportedSystems = [ "aarch64-linux" "x86_64-linux" ];
+  outputs =
+    {
+      self,
+      nixpkgs,
+      crane,
+    }:
+    let
+      supportedSystems = [
+        "aarch64-linux"
+        "x86_64-linux"
+      ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
       nixpkgsFor = forAllSystems (system: import nixpkgs { inherit system; });
-  in {
-    packages = forAllSystems (system: let pkgs = nixpkgsFor.${system}; in {
-      default = crane.lib.${system}.buildPackage {
-        src = ./.;
+    in
+    {
+      packages = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgsFor.${system};
+        in
+        {
+          default = crane.lib.${system}.buildPackage {
+            src = ./.;
 
-        STARDUST_RES_PREFIXES = pkgs.stdenvNoCC.mkDerivation {
-          name = "resources";
-          src = ./.;
+            STARDUST_RES_PREFIXES = pkgs.stdenvNoCC.mkDerivation {
+              name = "resources";
+              src = ./.;
 
-          buildPhase = "cp -r $src/res $out";
-        };
-      };
+              buildPhase = "cp -r $src/res $out";
+            };
+          };
 
-    devShells = forAllSystems (system: let pkgs = nixpkgsFor.${system}; in {
-      default = pkgs.mkShell {
-        nativeBuildInputs = with pkgs; [
-          cargo
-          rustc
-        ];
-      };
-    });
-  });
-  };
+          devShells = forAllSystems (
+            system:
+            let
+              pkgs = nixpkgsFor.${system};
+            in
+            {
+              default = pkgs.mkShell {
+                nativeBuildInputs = with pkgs; [
+                  cargo
+                  rustc
+                ];
+              };
+            }
+          );
+        }
+      );
+    };
 }
