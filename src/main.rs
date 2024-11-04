@@ -1,4 +1,3 @@
-use color_eyre::eyre::Result;
 use glam::Vec3;
 use manifest_dir_macros::directory_relative_path;
 use map_range::MapRange;
@@ -10,27 +9,38 @@ use stardust_xr_fusion::{
     drawable::{Line, LinePoint, Lines, LinesAspect},
     fields::{CylinderShape, Field, Shape},
     input::{InputDataType, InputHandler},
-    node::{MethodResult, NodeError, NodeType},
-    root::{ClientState, FrameInfo, RootAspect, RootHandler},
+    node::{MethodResult, NodeResult, NodeType},
+    root::{ClientState, FrameInfo, RootAspect, RootEvent},
     spatial::{Spatial, SpatialAspect, Transform},
     values::color::rgba_linear,
 };
 use stardust_xr_molecules::input_action::{InputQueue, InputQueueable, SimpleAction, SingleAction};
+use std::path::Path;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<()> {
-    color_eyre::install()?;
-    let (client, event_loop) = Client::connect_with_async_loop().await?;
-    client.set_base_prefixes(&[directory_relative_path!("res")])?;
+async fn main() {
+    color_eyre::install().unwrap();
+    let mut client = Client::connect().await.unwrap();
+    client
+        .setup_resources(&[Path::new(directory_relative_path!("res"))])
+        .unwrap();
 
-    let pen = Pen::new(&client, PenSettings::default())?;
-    let _wrapped_root = client.get_root().alias().wrap(pen)?;
-
-    tokio::select! {
-        _ = tokio::signal::ctrl_c() => (),
-        e = event_loop => e??,
-    }
-    Ok(())
+    let mut pen = Pen::new(&client, PenSettings::default()).unwrap();
+    client
+        .sync_event_loop(|client, _| {
+            while let Some(event) = client.get_root().recv_root_event() {
+                match event {
+                    RootEvent::Frame { info } => {
+                        pen.frame(info);
+                    }
+                    RootEvent::SaveState { response } => {
+                        response.send(pen.save_state());
+                    }
+                }
+            }
+        })
+        .await
+        .unwrap();
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,7 +69,7 @@ pub struct Pen {
     strokes: Vec<Line>,
 }
 impl Pen {
-    pub fn new(client: &Client, settings: PenSettings) -> Result<Self, NodeError> {
+    pub fn new(client: &Client, settings: PenSettings) -> NodeResult<Self> {
         let visual_length = 0.075;
         let pen_root = Spatial::create(client.get_root(), Transform::none(), true)?;
         let field = Field::create(
@@ -110,9 +120,10 @@ impl Pen {
             strokes: Vec::new(),
         })
     }
-}
-impl RootHandler for Pen {
-    fn frame(&mut self, _info: FrameInfo) {
+    pub fn frame(&mut self, _info: FrameInfo) {
+        if !self.input.handle_events() {
+            return;
+        };
         self.grab_action.update(
             false,
             &self.input,
