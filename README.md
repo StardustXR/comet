@@ -1,16 +1,18 @@
 # comet
 A virtual pen that can be grabbed and used to draw sketches quickly anywhere within Stardust XR.
+> [!IMPORTANT]  
+> Requires the [Stardust XR Server](https://github.com/StardustXR/server) to be running.
 
-## Support/Questions
-Discord: https://discord.gg/PV5CW6Y4SV
-Matrix Space: #stardust-xr:matrix.org
+If you installed the Stardust XR server via:  
+```note
+sudo dnf group install stardust-xr
+```
+Or if you installed via the [installation script](https://github.com/cyberneticmelon/usefulscripts/blob/main/stardustxr_setup.sh), Atmosphere comes pre-installed
 
-## Run
-1. Run Monado or WiVRn
-2. Run the [Stardust XR server](https://github.com/StardustXR/server/)
-3. `cargo run --locked`
 
-## Usage
+## How to Use
+Run the command `comet` or `comet_dev`
+
 ### Controllers
 Put the cursor near the pen and hold grip to grab it. Then, hold trigger to draw.
 
@@ -19,6 +21,13 @@ Curl your middle, ring, and pinky fingers when your hand is next to the pen to g
 
 ### Pointers
 Not supported yet
+
+## Manual Installation
+Clone the repository and after the server is running:
+```sh
+cargo run
+```
+
 
 ## Todo
 - Add erase functionality (ideally making a fist and rubbing out pen marks like on a whiteboard for hands)
