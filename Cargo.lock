@@ -31,7 +31,7 @@ dependencies = [
 [[package]]
 name = "asteroids"
 version = "2.0.0"
-source = "git+https://github.com/StardustXR/asteroids.git?branch=dev#5364cc4204ae78bf0737eadffd8419d882c739a5"
+source = "git+https://github.com/StardustXR/asteroids.git?branch=dev#f813450df1b9dd7f45c8509c314da6cbf22e7935"
 dependencies = [
  "convert_case 0.8.0",
  "derive-where",
@@ -685,6 +685,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e4afd9ad95555081e109fe1d21f2a30c691b5f0919c67dfa690a2e1eb6bd51c"
 dependencies = [
  "mint",
+ "serde",
 ]
 
 [[package]]
