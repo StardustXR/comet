@@ -1,214 +1,132 @@
-use glam::Vec3;
-use manifest_dir_macros::directory_relative_path;
-use map_range::MapRange;
-use mint::Vector3;
-use rustc_hash::FxHashMap;
+use std::time::Instant;
+
+use asteroids::{
+    client::ClientState,
+    custom::{ElementTrait, FnWrapper},
+    elements::{Lines, Pen, PenState, Spatial},
+    util::Migrate,
+};
+use glam::{Quat, Vec3};
+use map_range::MapRange as _;
 use stardust_xr_fusion::{
-    client::Client,
-    core::schemas::flex::flexbuffers,
-    drawable::{Line, LinePoint, Lines, LinesAspect},
-    fields::{CylinderShape, Field, Shape},
-    input::{InputDataType, InputHandler},
-    node::{MethodResult, NodeResult, NodeType},
-    root::{ClientState, FrameInfo, RootAspect, RootEvent},
-    spatial::{Spatial, SpatialAspect, Transform},
+    drawable::{Line, LinePoint},
+    input::{InputData, InputDataType},
     values::color::rgba_linear,
 };
-use stardust_xr_molecules::input_action::{InputQueue, InputQueueable, SimpleAction, SingleAction};
-use std::path::Path;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    color_eyre::install().unwrap();
-    let mut client = Client::connect().await.unwrap();
-    client
-        .setup_resources(&[Path::new(directory_relative_path!("res"))])
-        .unwrap();
-
-    let mut pen = Pen::new(&client, PenSettings::default()).unwrap();
-    client
-        .sync_event_loop(|client, _| {
-            while let Some(event) = client.get_root().recv_root_event() {
-                match event {
-                    RootEvent::Frame { info } => {
-                        pen.frame(info);
-                    }
-                    RootEvent::SaveState { response } => {
-                        response.send(pen.save_state());
-                    }
-                }
-            }
-        })
-        .await
-        .unwrap();
+    asteroids::client::run::<State>(&[]).await;
 }
-
-#[derive(Debug, Clone, Copy)]
-pub struct PenSettings {
-    pub max_distance: f32,
-    pub thickness: f32,
-}
-impl Default for PenSettings {
-    fn default() -> Self {
-        Self {
-            max_distance: 0.05,
-            thickness: 0.005,
-        }
-    }
-}
-
-pub struct Pen {
-    settings: PenSettings,
-    pen_root: Spatial,
-    _field: Field,
-    input: InputQueue,
-    grab_action: SingleAction,
-    draw_action: SimpleAction,
-    _visuals: Lines,
-    stroke_lines: Lines,
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
+struct State {
     strokes: Vec<Line>,
+    line_thickness: f32,
+    pen_pos: Vec3,
+    pen_rot: Quat,
+    last_pen_update_pos: Vec3,
+    #[serde(skip)]
+    grab_stopped: Option<Instant>,
 }
-impl Pen {
-    pub fn new(client: &Client, settings: PenSettings) -> NodeResult<Self> {
-        let visual_length = 0.075;
-        let pen_root = Spatial::create(client.get_root(), Transform::none(), true)?;
-        let field = Field::create(
-            &pen_root,
-            Transform::from_translation([0.0, 0.0, visual_length * 0.5]),
-            Shape::Cylinder(CylinderShape {
-                length: visual_length,
-                radius: settings.thickness * 0.5,
-            }),
-        )?;
-        let input = InputHandler::create(client.get_root(), Transform::none(), &field)?.queue()?;
-
-        let visuals = Lines::create(
-            &pen_root,
-            Transform::none(),
-            &[Line {
-                points: vec![
-                    LinePoint {
-                        point: [0.0; 3].into(),
-                        thickness: 0.0,
-                        color: rgba_linear!(1.0, 0.0, 0.0, 0.0),
-                    },
-                    LinePoint {
-                        point: [0.0, 0.0, settings.thickness].into(),
-                        thickness: settings.thickness,
-                        color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
-                    },
-                    LinePoint {
-                        point: [0.0, 0.0, visual_length].into(),
-                        thickness: settings.thickness,
-                        color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
-                    },
-                ],
-                cyclic: false,
-            }],
-        )?;
-        let stroke_lines = Lines::create(client.get_root(), Transform::none(), &[])?;
-        stroke_lines.set_zoneable(true)?;
-        Ok(Self {
-            settings,
-            pen_root,
-            _field: field,
-            input,
-            grab_action: Default::default(),
-            draw_action: Default::default(),
-            _visuals: visuals,
-            stroke_lines,
+impl Default for State {
+    fn default() -> Self {
+        State {
             strokes: Vec::new(),
-        })
+            line_thickness: 0.005,
+            pen_pos: Vec3::ZERO,
+            pen_rot: Quat::IDENTITY,
+            last_pen_update_pos: Vec3::ZERO,
+            grab_stopped: None,
+        }
     }
-    pub fn frame(&mut self, _info: FrameInfo) {
-        if !self.input.handle_events() {
-            return;
-        };
-        self.grab_action.update(
-            false,
-            &self.input,
-            |data| data.distance < self.settings.max_distance,
-            |data| {
-                data.datamap.with_data(|datamap| match &data.input {
-                    InputDataType::Hand(_) => datamap.idx("grab_strength").as_f32() > 0.90,
-                    InputDataType::Tip(_) => datamap.idx("grab").as_f32() > 0.90,
-                    _ => false,
+}
+impl Migrate for State {
+    type Old = State;
+}
+impl ClientState for State {
+    const QUALIFIER: &'static str = "org";
+
+    const ORGANIZATION: &'static str = "stardust";
+
+    const NAME: &'static str = "comet";
+
+    fn reify(&self) -> asteroids::Element<Self> {
+        Spatial::default().zoneable(true).with_children(
+            [
+                Pen::<State>::new(self.pen_pos, self.pen_rot, |state, pen_state, pos, rot| {
+                    state.pen_pos = pos.into();
+                    state.pen_rot = rot.into();
+                    let strength = match pen_state {
+                        PenState::StartedDrawing(v) => {
+                            if state.grab_stopped.is_none_or(|v| {
+                                Instant::now().duration_since(v).as_secs_f32() >= (1.0 / 30.0)
+                            }) {
+                                state.strokes.push(Line {
+                                    points: Vec::with_capacity(128),
+                                    cyclic: false,
+                                });
+                            }
+                            v
+                        }
+                        PenState::Drawing(v) => v,
+                        PenState::StoppedDrawing => {
+                            state.grab_stopped = Some(Instant::now());
+                            return;
+                        }
+                        PenState::Grabbed => return,
+                    };
+                    if state.last_pen_update_pos.distance(state.pen_pos) < 0.001 {
+                        return;
+                    }
+                    state.last_pen_update_pos = state.pen_pos;
+                    let Some(current_stroke) = state.strokes.last_mut() else {
+                        return;
+                    };
+                    current_stroke.points.push(LinePoint {
+                        point: pos,
+                        thickness: state.line_thickness * strength,
+                        color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
+                    });
+                    if current_stroke.points.len() >= 128 {
+                        println!("making new line because of size");
+                        state.strokes.push(Line {
+                            points: {
+                                let mut vec = Vec::with_capacity(128);
+                                vec.push(LinePoint {
+                                    point: pos,
+                                    thickness: state.line_thickness * strength,
+                                    color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
+                                });
+                                vec
+                            },
+                            cyclic: false,
+                        });
+                    }
                 })
-            },
-        );
-        self.draw_action.update(&self.input, &|data| {
-            data.datamap.with_data(|datamap| match &data.input {
-                InputDataType::Hand(h) => {
-                    Vec3::from(h.thumb.tip.position).distance(h.index.tip.position.into()) < 0.03
-                }
-                InputDataType::Tip(_) => datamap.idx("select").as_f32() > 0.01,
-                _ => false,
-            })
-        });
-
-        if self.grab_action.actor_started() {
-            let _ = self.pen_root.set_zoneable(false);
-        }
-        if self.grab_action.actor_stopped() {
-            let _ = self.pen_root.set_zoneable(true);
-        }
-        let Some(grab_actor) = self.grab_action.actor() else {
-            return;
-        };
-        let transform = match &grab_actor.input {
-            InputDataType::Hand(h) => Transform::from_translation_rotation(
-                (Vec3::from(h.thumb.tip.position) + Vec3::from(h.index.tip.position)) * 0.5,
-                h.palm.rotation,
+                .drawing_value({
+                    let w: FnWrapper<dyn Fn(&InputData) -> f32 + Send + Sync> =
+                        FnWrapper(Box::new(|data: &InputData| {
+                            data.datamap.with_data(|datamap| match &data.input {
+                                InputDataType::Hand(h) => Vec3::from(h.thumb.tip.position)
+                                    .distance(h.index.tip.position.into())
+                                    .map_range(0.03..0.01, 0.0..1.0)
+                                    .clamp(0.0, 1.0)
+                                    .sqrt(),
+                                InputDataType::Tip(_) => datamap.idx("select").as_f32().sqrt(),
+                                _ => unimplemented!(),
+                            })
+                        }));
+                    w
+                })
+                .color(rgba_linear!(0.5, 0.0, 0.0, 1.0))
+                .build(),
+            ]
+            .into_iter()
+            .chain(
+                self.strokes
+                    .iter()
+                    .map(|line| Lines::default().lines(vec![line.clone()]).build()),
             ),
-            InputDataType::Tip(t) => Transform::from_translation_rotation(t.origin, t.orientation),
-            _ => Transform::none(),
-        };
-        let _ = self
-            .pen_root
-            .set_relative_transform(self.input.handler(), transform);
-
-        if self.draw_action.started_acting().contains(grab_actor) {
-            self.strokes.push(Line {
-                points: Vec::new(),
-                cyclic: false,
-            });
-        }
-        if let Some(draw_actor) = self.draw_action.currently_acting().get(grab_actor) {
-            let point = match &draw_actor.input {
-                InputDataType::Hand(h) => Vector3::from(
-                    (Vec3::from(h.thumb.tip.position) + Vec3::from(h.index.tip.position)) * 0.5,
-                ),
-                InputDataType::Tip(t) => t.origin,
-                _ => unreachable!(),
-            };
-            let strength = draw_actor
-                .datamap
-                .with_data(|datamap| match &draw_actor.input {
-                    InputDataType::Hand(h) => Vec3::from(h.thumb.tip.position)
-                        .distance(h.index.tip.position.into())
-                        .map_range(0.03..0.0, 0.0..1.0)
-                        .clamp(0.0, 1.0)
-                        .sqrt(),
-                    InputDataType::Tip(_) => datamap.idx("select").as_f32(),
-                    _ => unimplemented!(),
-                });
-            let Some(current_stroke) = self.strokes.last_mut() else {
-                return;
-            };
-            current_stroke.points.push(LinePoint {
-                point,
-                thickness: self.settings.thickness * strength,
-                color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
-            });
-            self.stroke_lines.set_lines(&self.strokes).unwrap();
-        }
-    }
-
-    fn save_state(&mut self) -> MethodResult<ClientState> {
-        ClientState::new(
-            Some(flexbuffers::to_vec(&self.strokes).unwrap()),
-            self._field.node().client().unwrap().get_root(),
-            FxHashMap::from_iter([("pen".to_string(), &self.pen_root)]),
         )
     }
 }
