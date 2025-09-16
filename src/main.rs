@@ -1,22 +1,19 @@
 use std::time::Instant;
 
-use asteroids::{
-    client::ClientState,
-    custom::{ElementTrait, FnWrapper},
-    elements::{Lines, Pen, PenState, Spatial},
-    util::Migrate,
-};
 use glam::{Quat, Vec3};
-use map_range::MapRange as _;
+use stardust_xr_asteroids::{
+    client::ClientState,
+    elements::{Lines, Pen, PenState, Spatial},
+    CustomElement as _, Migrate, Reify,
+};
 use stardust_xr_fusion::{
     drawable::{Line, LinePoint},
-    input::{InputData, InputDataType},
     values::color::rgba_linear,
 };
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    asteroids::client::run::<State>(&[]).await;
+    stardust_xr_asteroids::client::run::<State>(&[]).await;
 }
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct State {
@@ -44,15 +41,14 @@ impl Migrate for State {
     type Old = State;
 }
 impl ClientState for State {
-    const QUALIFIER: &'static str = "org";
-
-    const ORGANIZATION: &'static str = "stardust";
-
-    const NAME: &'static str = "comet";
-
-    fn reify(&self) -> asteroids::Element<Self> {
-        Spatial::default().zoneable(true).with_children(
-            [
+    const APP_ID: &'static str = "org.stardustxr.comet";
+}
+impl Reify for State {
+    fn reify(&self) -> impl stardust_xr_asteroids::Element<Self> {
+        Spatial::default()
+            .zoneable(true)
+            .build()
+            .child(
                 Pen::<State>::new(self.pen_pos, self.pen_rot, |state, pen_state, pos, rot| {
                     state.pen_pos = pos.into();
                     state.pen_rot = rot.into();
@@ -103,30 +99,13 @@ impl ClientState for State {
                         });
                     }
                 })
-                .drawing_value({
-                    let w: FnWrapper<dyn Fn(&InputData) -> f32 + Send + Sync> =
-                        FnWrapper(Box::new(|data: &InputData| {
-                            data.datamap.with_data(|datamap| match &data.input {
-                                InputDataType::Hand(h) => Vec3::from(h.thumb.tip.position)
-                                    .distance(h.index.tip.position.into())
-                                    .map_range(0.03..0.01, 0.0..1.0)
-                                    .clamp(0.0, 1.0)
-                                    .sqrt(),
-                                InputDataType::Tip(_) => datamap.idx("select").as_f32().sqrt(),
-                                _ => unimplemented!(),
-                            })
-                        }));
-                    w
-                })
                 .color(rgba_linear!(0.5, 0.0, 0.0, 1.0))
                 .build(),
-            ]
-            .into_iter()
-            .chain(
+            )
+            .children(
                 self.strokes
                     .iter()
-                    .map(|line| Lines::default().lines(vec![line.clone()]).build()),
-            ),
-        )
+                    .map(|line| Lines::new(vec![line.clone()]).build()),
+            )
     }
 }
