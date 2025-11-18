@@ -99,7 +99,7 @@ impl Reify for State {
                     }
                 })
                 .color(rgba_linear!(0.5, 0.0, 0.0, 1.0))
-                .hand_draw_threshold(0.6)
+                .hand_draw_threshold(0.65)
                 .build(),
             )
             .children(
