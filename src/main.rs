@@ -3,7 +3,7 @@ use std::time::Instant;
 use glam::{Quat, Vec3};
 use stardust_xr_asteroids::{
     client::ClientState,
-    elements::{Lines, Pen, PenState, Spatial},
+    elements::{Lines, Pen, PenState, Reparentable},
     CustomElement as _, Migrate, Reify,
 };
 use stardust_xr_fusion::{
@@ -45,8 +45,7 @@ impl ClientState for State {
 }
 impl Reify for State {
     fn reify(&self) -> impl stardust_xr_asteroids::Element<Self> {
-        Spatial::default()
-            .zoneable(true)
+        Reparentable::default()
             .build()
             .child(
                 Pen::<State>::new(self.pen_pos, self.pen_rot, |state, pen_state, pos, rot| {
