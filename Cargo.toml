@@ -1,7 +1,7 @@
 [package]
 name = "comet"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 glam = { version = "0.23.0", features = ["mint", "serde"] }
@@ -9,15 +9,18 @@ tokio = { version = "1.22.0", default-features = false, features = ["rt"] }
 map-range = "0.1.1"
 derive-where = "1.2.7"
 serde = { version = "1.0.219", features = ["derive"] }
+stardust-xr-fusion = "0.50.0"
+stardust-xr-molecules = "0.50.0"
+stardust-xr-asteroids = "0.50.0"
 
-[dependencies.stardust-xr-fusion]
-git = "https://github.com/StardustXR/core.git"
-branch = "dev"
+# [dependencies.stardust-xr-fusion]
+# git = "https://github.com/StardustXR/core.git"
+# branch = "dev"
 
-[dependencies.stardust-xr-molecules]
-git = "https://github.com/StardustXR/molecules.git"
-branch = "dev"
+# [dependencies.stardust-xr-molecules]
+# git = "https://github.com/StardustXR/molecules.git"
+# branch = "dev"
 
-[dependencies.stardust-xr-asteroids]
-git = "https://github.com/StardustXR/asteroids.git"
-branch = "dev"
+# [dependencies.stardust-xr-asteroids]
+# git = "https://github.com/StardustXR/asteroids.git"
+# branch = "dev"
