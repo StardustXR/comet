@@ -1,6 +1,6 @@
 use glam::{Quat, Vec3};
 use stardust_xr_asteroids::{
-    CustomElement as _, Migrate, Reify,
+    Context, CustomElement as _, Element, Migrate, Reify, Tasker,
     client::ClientState,
     elements::{Lines, Pen, PenState, Reparentable},
 };
@@ -41,7 +41,7 @@ impl ClientState for State {
     const APP_ID: &'static str = "org.stardustxr.comet";
 }
 impl Reify for State {
-    fn reify(&self) -> impl stardust_xr_asteroids::Element<Self> {
+    fn reify(&self, _context: &Context, _tasks: impl Tasker<Self>) -> impl Element<Self> {
         Reparentable::default()
             .build()
             .child(

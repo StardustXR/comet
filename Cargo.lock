@@ -1931,8 +1931,8 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stardust-xr-asteroids"
-version = "0.50.0"
-source = "git+https://github.com/StardustXR/asteroids.git#37f69944b3238d2ca0d66b183329eb167a366250"
+version = "0.51.0"
+source = "git+https://github.com/StardustXR/asteroids.git#50b5f95ad40a150be61ba7e82c90fbc56d1e6c2c"
 dependencies = [
  "bumpalo",
  "derive-where",
@@ -1958,8 +1958,8 @@ dependencies = [
 
 [[package]]
 name = "stardust-xr-fusion"
-version = "0.50.0"
-source = "git+https://github.com/StardustXR/core.git#dab3536d2c354bae85abf96496abb94ffa0e512d"
+version = "0.51.0"
+source = "git+https://github.com/StardustXR/core.git#e7ce3bc3962c563967dfad6b00e1fb290f11eeb7"
 dependencies = [
  "color-eyre",
  "convert_case",
@@ -1984,8 +1984,8 @@ dependencies = [
 
 [[package]]
 name = "stardust-xr-gluon"
-version = "0.50.0"
-source = "git+https://github.com/StardustXR/core.git#dab3536d2c354bae85abf96496abb94ffa0e512d"
+version = "0.51.0"
+source = "git+https://github.com/StardustXR/core.git#e7ce3bc3962c563967dfad6b00e1fb290f11eeb7"
 dependencies = [
  "futures",
  "nanoid",
@@ -1997,15 +1997,14 @@ dependencies = [
 
 [[package]]
 name = "stardust-xr-molecules"
-version = "0.50.0"
-source = "git+https://github.com/StardustXR/molecules.git#be09b47d0f2d5f78b9009586f5556f36b014b1ec"
+version = "0.51.0"
+source = "git+https://github.com/StardustXR/molecules.git#1579b4c7cec85e2a823ad0baf50c268b98b4a522"
 dependencies = [
  "ashpd",
  "futures-util",
  "glam 0.30.9",
  "lazy_static",
  "lerp",
- "map-range",
  "rustc-hash",
  "serde",
  "stardust-xr-fusion",
@@ -2016,8 +2015,8 @@ dependencies = [
 
 [[package]]
 name = "stardust-xr-protocol"
-version = "0.50.0"
-source = "git+https://github.com/StardustXR/core.git#dab3536d2c354bae85abf96496abb94ffa0e512d"
+version = "0.51.0"
+source = "git+https://github.com/StardustXR/core.git#e7ce3bc3962c563967dfad6b00e1fb290f11eeb7"
 dependencies = [
  "fnv",
  "kdl",
@@ -2026,8 +2025,8 @@ dependencies = [
 
 [[package]]
 name = "stardust-xr-wire"
-version = "0.50.0"
-source = "git+https://github.com/StardustXR/core.git#dab3536d2c354bae85abf96496abb94ffa0e512d"
+version = "0.51.0"
+source = "git+https://github.com/StardustXR/core.git#e7ce3bc3962c563967dfad6b00e1fb290f11eeb7"
 dependencies = [
  "dirs",
  "flatbuffers",
