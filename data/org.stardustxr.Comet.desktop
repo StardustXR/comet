@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Comet
+Comment=Annotation pen for Stardust XR
+Type=Application
+Exec=comet
+Terminal=false
+Categories=XR;Stardust;
+Keywords=XR;Stardust;
+Icon=org.stardustxr.Comet
+StartupNotify=false
+NoDisplay=true

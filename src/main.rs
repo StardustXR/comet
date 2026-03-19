@@ -38,7 +38,7 @@ impl Migrate for State {
     type Old = State;
 }
 impl ClientState for State {
-    const APP_ID: &'static str = "org.stardustxr.comet";
+    const APP_ID: &'static str = "org.stardustxr.Comet";
 }
 impl Reify for State {
     fn reify(&self, _context: &Context, _tasks: impl Tasker<Self>) -> impl Element<Self> {
