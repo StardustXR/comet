@@ -2,7 +2,7 @@ use glam::{Mat4, Quat, Vec3};
 use stardust_xr_asteroids::{
     Context, CustomElement as _, Element, Entity, Migrate, Reify, Tasker,
     client::ClientState,
-    components::Reparentable,
+    components::Containable,
     elements::{Lines, Pen, PenState},
 };
 use stardust_xr_fusion::{
@@ -55,7 +55,7 @@ impl Reify for State {
                 radius: 0.0025 / 2.0,
             }),
         })
-        .component(Reparentable::default())
+        .component(Containable::default())
         .build()
         .child(
             Pen::<State>::new(self.pen_pos, self.pen_rot, |state, pen_state, pos, rot| {

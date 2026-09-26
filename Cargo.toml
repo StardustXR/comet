@@ -4,18 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-glam = { version = "0.23.0", features = ["mint", "serde"] }
+glam = { version = "0.33.0", features = ["mint", "serde"] }
 tokio = { version = "1.22.0", default-features = false, features = ["rt"] }
-map-range = "0.1.1"
-derive-where = "1.2.7"
 serde = { version = "1.0.219", features = ["derive"] }
 
 [dependencies.stardust-xr-fusion]
-version = "0.51.0"
-git = "https://github.com/StardustXR/core.git"
-branch = "refactor/strongipc"
+version = "0.52.0"
+# git = "https://github.com/StardustXR/core.git"
 
 [dependencies.stardust-xr-asteroids]
-version = "0.51.0"
-git = "https://github.com/StardustXR/asteroids.git"
-branch = "refactor/strongipc"
+version = "0.52.0"
+# git = "https://github.com/StardustXR/asteroids.git"
