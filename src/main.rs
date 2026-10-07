@@ -45,7 +45,12 @@ impl ClientState for State {
     const APP_ID: &'static str = "org.stardustxr.Comet";
 }
 impl Reify for State {
-    fn reify(&self, _context: &Context, _tasks: impl Tasker<Self>) -> impl Element<Self> {
+    fn reify(
+        &self,
+        _context: &Context,
+        _tasks: impl Tasker<Self>,
+        _props: (),
+    ) -> impl Element<Self> {
         Entity::new(Shape::Transform {
             transform: (Mat4::from_rotation_translation(self.pen_rot, self.pen_pos)
                 * Mat4::from_translation([0.0, 0.075 / 2.0, 0.0].into()))
