@@ -29,16 +29,15 @@
           default = craneLib.buildPackage {
             src = ./.;
             cargoLock = ./Cargo.lock;
+            doCheck = false;
 
-            STARDUST_RES_PREFIXES = pkgs.stdenvNoCC.mkDerivation {
-              name = "data";
-              src = ./.;
-
-              buildPhase = "cp -r $src/data $out";
-            };
+            nativeBuildInputs = [ pkgs.just ];
+            postInstall = "just prefix=$out install-data";
+            STARDUST_RES_PREFIXES = "${builtins.placeholder "out"}/share";
           };
         }
       );
+      formatter = forAllSystems (system: nixpkgsFor.${system}.nixfmt-tree);
 
       devShells = forAllSystems (
         system:
@@ -50,6 +49,7 @@
             nativeBuildInputs = with pkgs; [
               cargo
               rustc
+              just
             ];
           };
         }
