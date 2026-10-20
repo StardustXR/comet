@@ -14,4 +14,4 @@ version = "0.53.0-rc.1"
 
 [dependencies.stardust-xr-asteroids]
 version = "0.53.0-rc.1"
-# git = "https://github.com/StardustXR/asteroids.git"
+git = "https://github.com/StardustXR/asteroids.git"

@@ -1,4 +1,4 @@
-use glam::{Mat4, Quat, Vec3};
+use glam::{FloatExt, Mat4, Quat, Vec3};
 use stardust_xr_asteroids::{
     Context, CustomElement as _, Element, Entity, Migrate, Reify, Tasker,
     client::ClientState,
@@ -17,14 +17,93 @@ async fn main() {
         .await
         .unwrap();
 }
+const SPACING: f32 = 0.004;
+const SWEEPS: usize = 60;
+/// m/s where a point gets the full pull toward its chord, slower strokes keep their detail
+const REFERENCE_SPEED: f32 = 0.3;
+
+#[derive(Clone, Copy, Debug)]
+struct StrokePoint {
+    pos: Vec3,
+    thickness: f32,
+    t: f32,
+}
+
+/// the whole stroke is rebuilt from the raw samples every frame, so the tip settles as you keep drawing
+fn stabilize(raw: &[StrokePoint]) -> Vec<LinePoint> {
+    let mut points = resample(raw, SPACING);
+    // weights come from the unsmoothed points so relaxing can't feed back into them
+    let weights: Vec<(f32, f32)> = points
+        .windows(3)
+        .map(|w| {
+            let before = w[0].pos.distance(w[1].pos);
+            let total = before + w[1].pos.distance(w[2].pos);
+            let t = if total > 0.0 { before / total } else { 0.5 };
+            let dt = w[2].t - w[0].t;
+            let pull = if dt > 0.0 {
+                (total / dt / REFERENCE_SPEED).min(1.0)
+            } else {
+                1.0
+            };
+            (t, pull)
+        })
+        .collect();
+    for _ in 0..SWEEPS {
+        for (i, &(t, pull)) in weights.iter().enumerate() {
+            let target = points[i].pos.lerp(points[i + 2].pos, t);
+            points[i + 1].pos = points[i + 1].pos.lerp(target, pull);
+        }
+    }
+    points
+        .into_iter()
+        .map(|p| LinePoint {
+            point: p.pos.into(),
+            thickness: p.thickness,
+            color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
+        })
+        .collect()
+}
+
+/// even arc length spacing so the smoothing pulls the same amount no matter how fast you draw
+fn resample(raw: &[StrokePoint], spacing: f32) -> Vec<StrokePoint> {
+    let Some(&first) = raw.first() else {
+        return Vec::new();
+    };
+    let mut out = vec![first];
+    let mut residual = 0.0;
+    for w in raw.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let seg = a.pos.distance(b.pos);
+        if seg < 1e-5 {
+            continue;
+        }
+        let mut d = spacing - residual;
+        while d <= seg {
+            let t = d / seg;
+            out.push(StrokePoint {
+                pos: a.pos.lerp(b.pos, t),
+                thickness: a.thickness.lerp(b.thickness, t),
+                t: a.t.lerp(b.t, t),
+            });
+            d += spacing;
+        }
+        residual = seg - (d - spacing);
+    }
+    let tip = raw[raw.len() - 1];
+    if out[out.len() - 1].pos.distance(tip.pos) > 1e-5 {
+        out.push(tip);
+    }
+    out
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct State {
     strokes: Vec<Line>,
     line_thickness: f32,
     pen_pos: Vec3,
     pen_rot: Quat,
-    smooth_cursor: Vec3,
-    smooth_threshold: f32,
+    #[serde(skip)]
+    raw: Vec<StrokePoint>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -33,8 +112,7 @@ impl Default for State {
             line_thickness: 0.005,
             pen_pos: Vec3::ZERO,
             pen_rot: Quat::IDENTITY,
-            smooth_cursor: Vec3::ZERO,
-            smooth_threshold: 0.008, // Tune this (5-15mm)
+            raw: Vec::new(),
         }
     }
 }
@@ -47,7 +125,7 @@ impl ClientState for State {
 impl Reify for State {
     fn reify(
         &self,
-        _context: &Context,
+        context: &Context,
         _tasks: impl Tasker<Self>,
         _props: (),
     ) -> impl Element<Self> {
@@ -63,39 +141,36 @@ impl Reify for State {
         .component(Containable::default())
         .build()
         .child(
-            Pen::<State>::new(self.pen_pos, self.pen_rot, |state, pen_state, pos, rot| {
-                state.pen_pos = pos.into();
-                state.pen_rot = rot.into();
-                match pen_state {
-                    PenState::StartedDrawing(strength) => {
-                        state.smooth_cursor = state.pen_pos;
-                        state.strokes.push(Line {
-                            points: vec![LinePoint {
-                                point: pos,
+            Pen::<State>::new(self.pen_pos, self.pen_rot, {
+                let context = context.clone();
+                move |state, pen_state, pos, rot| {
+                    state.pen_pos = pos.into();
+                    state.pen_rot = rot.into();
+                    match pen_state {
+                        PenState::StartedDrawing(strength) => {
+                            state.raw = vec![StrokePoint {
+                                pos: state.pen_pos,
                                 thickness: state.line_thickness * strength,
-                                color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
-                            }],
-                            cyclic: false,
-                        });
-                    }
-                    PenState::Drawing(strength) => {
-                        if let Some(current_stroke) = state.strokes.last_mut() {
-                            let dist = state.smooth_cursor.distance(state.pen_pos);
-                            if dist > state.smooth_threshold {
-                                // Lazy string: pull cursor toward input
-                                let dir = (state.pen_pos - state.smooth_cursor).normalize_or_zero();
-                                state.smooth_cursor += dir * state.smooth_threshold.min(dist);
-
-                                current_stroke.points.push(LinePoint {
-                                    point: (state.smooth_cursor.into()),
-                                    thickness: state.line_thickness * strength,
-                                    color: rgba_linear!(1.0, 0.0, 0.0, 1.0),
-                                });
+                                t: context.time(),
+                            }];
+                            state.strokes.push(Line {
+                                points: stabilize(&state.raw),
+                                cyclic: false,
+                            });
+                        }
+                        PenState::Drawing(strength) => {
+                            state.raw.push(StrokePoint {
+                                pos: state.pen_pos,
+                                thickness: state.line_thickness * strength,
+                                t: context.time(),
+                            });
+                            if let Some(stroke) = state.strokes.last_mut() {
+                                stroke.points = stabilize(&state.raw);
                             }
                         }
-                    }
-                    _ => {}
-                };
+                        _ => {}
+                    };
+                }
             })
             .color(rgba_linear!(0.5, 0.0, 0.0, 1.0))
             .hand_draw_threshold(0.65)

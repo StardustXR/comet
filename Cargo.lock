@@ -1200,8 +1200,7 @@ dependencies = [
 [[package]]
 name = "stardust-xr-asteroids"
 version = "0.53.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e41518b9358c47f16bc0c174bcbe7f5d130deef014b22e0ddb14e929ba048a2"
+source = "git+https://github.com/StardustXR/asteroids.git#05aea7b04360a4deda2da26f3d220573ca139580"
 dependencies = [
  "bumpalo",
  "derive-where",
@@ -1218,11 +1217,22 @@ dependencies = [
  "ron",
  "rustc-hash",
  "serde",
+ "stardust-xr-asteroids-derive",
  "stardust-xr-fusion",
  "stardust-xr-molecules",
  "tokio",
  "tracing",
  "zbus",
+]
+
+[[package]]
+name = "stardust-xr-asteroids-derive"
+version = "0.53.0-rc.1"
+source = "git+https://github.com/StardustXR/asteroids.git#05aea7b04360a4deda2da26f3d220573ca139580"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
