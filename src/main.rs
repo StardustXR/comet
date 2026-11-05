@@ -22,6 +22,12 @@ const SWEEPS: usize = 60;
 /// m/s where a point gets the full pull toward its chord, slower strokes keep their detail
 const REFERENCE_SPEED: f32 = 0.3;
 
+/// Index–thumb pinch strength to *start* drawing (asteroids `hand_draw_threshold`).
+/// Tuned live on Quest via WiVRn (2026-11-05).
+const PINCH_START: f32 = 0.7000931;
+/// Keep drawing until pinch drops below this (hysteresis vs `PINCH_START`).
+const PINCH_RELEASE: f32 = 0.6928417;
+
 #[derive(Clone, Copy, Debug)]
 struct StrokePoint {
     pos: Vec3,
@@ -104,6 +110,9 @@ struct State {
     pen_rot: Quat,
     #[serde(skip)]
     raw: Vec<StrokePoint>,
+    /// True while Pen reports Drawing/StartedDrawing — feeds pinch-release hysteresis.
+    #[serde(skip)]
+    pen_drawing: bool,
 }
 impl Default for State {
     fn default() -> Self {
@@ -113,9 +122,52 @@ impl Default for State {
             pen_pos: Vec3::ZERO,
             pen_rot: Quat::IDENTITY,
             raw: Vec::new(),
+            pen_drawing: false,
         }
     }
 }
+
+impl State {
+    fn pinch_threshold(&self) -> f32 {
+        if self.pen_drawing {
+            PINCH_RELEASE.min(PINCH_START)
+        } else {
+            PINCH_START
+        }
+    }
+
+    fn apply_pen_state(&mut self, pen_state: PenState, now: f32) {
+        match pen_state {
+            PenState::StartedDrawing(strength) | PenState::Drawing(strength) => {
+                let start = matches!(pen_state, PenState::StartedDrawing(_)) || self.raw.is_empty();
+                self.pen_drawing = true;
+                if start {
+                    self.raw.clear();
+                }
+                self.raw.push(StrokePoint {
+                    pos: self.pen_pos,
+                    thickness: self.line_thickness * strength,
+                    t: now,
+                });
+                let points = stabilize(&self.raw);
+                if start {
+                    self.strokes.push(Line {
+                        points,
+                        cyclic: false,
+                    });
+                } else if let Some(stroke) = self.strokes.last_mut() {
+                    stroke.points = points;
+                }
+            }
+            // Any non-drawing state closes the stroke, including grab/tracking loss.
+            _ => {
+                self.pen_drawing = false;
+                self.raw.clear();
+            }
+        }
+    }
+}
+
 impl Migrate for State {
     type Old = State;
 }
@@ -146,34 +198,11 @@ impl Reify for State {
                 move |state, pen_state, pos, rot| {
                     state.pen_pos = pos.into();
                     state.pen_rot = rot.into();
-                    match pen_state {
-                        PenState::StartedDrawing(strength) => {
-                            state.raw = vec![StrokePoint {
-                                pos: state.pen_pos,
-                                thickness: state.line_thickness * strength,
-                                t: context.time(),
-                            }];
-                            state.strokes.push(Line {
-                                points: stabilize(&state.raw),
-                                cyclic: false,
-                            });
-                        }
-                        PenState::Drawing(strength) => {
-                            state.raw.push(StrokePoint {
-                                pos: state.pen_pos,
-                                thickness: state.line_thickness * strength,
-                                t: context.time(),
-                            });
-                            if let Some(stroke) = state.strokes.last_mut() {
-                                stroke.points = stabilize(&state.raw);
-                            }
-                        }
-                        _ => {}
-                    };
+                    state.apply_pen_state(pen_state, context.time());
                 }
             })
             .color(rgba_linear!(0.5, 0.0, 0.0, 1.0))
-            .hand_draw_threshold(0.65)
+            .hand_draw_threshold(self.pinch_threshold())
             .build(),
         )
         .children(
@@ -181,5 +210,68 @@ impl Reify for State {
                 .iter()
                 .map(|line| Lines::new(vec![line.clone()]).build()),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thresholds_match_live_tuning() {
+        let state = State::default();
+        assert_eq!(state.pinch_threshold(), 0.7000931);
+        assert_eq!(PINCH_RELEASE, 0.6928417);
+        assert!(PINCH_RELEASE < PINCH_START);
+    }
+
+    #[test]
+    fn hysteresis_survives_the_gap_and_resets_on_release() {
+        let mut state = State::default();
+        state.apply_pen_state(PenState::StartedDrawing(1.0), 0.0);
+        let in_gap = (PINCH_START + PINCH_RELEASE) * 0.5;
+        assert!(in_gap < PINCH_START);
+        assert!(in_gap > state.pinch_threshold());
+        state.apply_pen_state(PenState::StoppedDrawing, 0.1);
+        assert!(!state.pen_drawing);
+        assert!(state.raw.is_empty());
+        assert_eq!(state.pinch_threshold(), PINCH_START);
+    }
+
+    #[test]
+    fn hand_loss_or_grab_without_draw_ends_the_stroke() {
+        for stop in [
+            PenState::Floating,
+            PenState::Grabbed,
+            PenState::StoppedDrawing,
+        ] {
+            let mut state = State::default();
+            state.apply_pen_state(PenState::StartedDrawing(1.0), 0.0);
+            state.pen_pos = Vec3::X * 0.01;
+            state.apply_pen_state(PenState::Drawing(1.0), 0.1);
+            let saved = state.strokes[0].points.clone();
+            state.apply_pen_state(stop, 0.2);
+            assert!(!state.pen_drawing);
+            assert!(state.raw.is_empty());
+            assert_eq!(state.strokes[0].points, saved);
+            state.apply_pen_state(stop, 0.3);
+            assert_eq!(state.strokes.len(), 1);
+        }
+    }
+
+    #[test]
+    fn drawing_after_loss_starts_fresh_without_overwriting_previous_ink() {
+        let mut state = State::default();
+        state.apply_pen_state(PenState::StartedDrawing(1.0), 0.0);
+        state.pen_pos = Vec3::X * 0.01;
+        state.apply_pen_state(PenState::Drawing(1.0), 0.1);
+        let saved = state.strokes[0].points.clone();
+        state.apply_pen_state(PenState::Floating, 0.2);
+        state.pen_pos = Vec3::X;
+        state.apply_pen_state(PenState::Drawing(1.0), 0.3);
+        assert_eq!(state.strokes.len(), 2);
+        assert_eq!(state.raw.len(), 1);
+        assert_eq!(state.strokes[0].points, saved);
+        assert_eq!(Vec3::from(state.strokes[1].points[0].point), Vec3::X);
     }
 }
